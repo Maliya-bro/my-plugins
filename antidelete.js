@@ -1,192 +1,156 @@
-const fs = require('fs');
-const path = require('path');
-const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+const { readSettings } = require("../lib/botSettings");
 
-const tempFolder = path.join(__dirname, '../temp');
-if (!fs.existsSync(tempFolder)) {
-  fs.mkdirSync(tempFolder, { recursive: true });
-}
-
-const messageStore = new Map();
-const mediaStore = new Map();
-
-const CLEANUP_TIME = 10 * 60 * 1000;
-
-function unwrapMessage(message) {
-  if (!message) return null;
-
-  if (message.ephemeralMessage) {
-    return unwrapMessage(message.ephemeralMessage.message);
-  }
-
-  if (message.viewOnceMessageV2) {
-    return unwrapMessage(message.viewOnceMessageV2.message);
-  }
-
-  if (message.viewOnceMessage) {
-    return unwrapMessage(message.viewOnceMessage.message);
-  }
-
-  return message;
-}
-
-function getExtension(type, msg) {
-  switch (type) {
-    case 'imageMessage': return '.jpg';
-    case 'videoMessage': return '.mp4';
-    case 'audioMessage': return '.ogg';
-    case 'stickerMessage': return '.webp';
-    case 'documentMessage':
-      return msg.documentMessage?.fileName
-        ? path.extname(msg.documentMessage.fileName)
-        : '.bin';
-    default:
-      return '.bin';
-  }
-}
-
-/* ===== FIX: use remoteJid|id key to avoid mismatch/collision ===== */
-function makeKey(key) {
-  return `${key.remoteJid}|${key.id}`;
-}
-function safeFileBase(storeKey) {
-  return storeKey.replace(/[^a-zA-Z0-9]/g, '_');
-}
+const store = new Map();
 
 module.exports = {
-  name: 'antidelete',
-
   onMessage: async (conn, msg) => {
+    if (!readSettings().anti_delete) return;
     if (!msg?.message || msg.key.fromMe) return;
 
-    const storeKey = makeKey(msg.key);
-    const remoteJid = msg.key.remoteJid;
-
-    const cleanMessage = unwrapMessage(msg.message);
-    if (!cleanMessage) return;
-
-    messageStore.set(storeKey, {
-      key: msg.key,
-      message: cleanMessage,
-      remoteJid
-    });
-
-    const type = Object.keys(cleanMessage)[0];
-    if (!type) return;
-
-    const mediaTypes = [
-      'imageMessage',
-      'videoMessage',
-      'audioMessage',
-      'stickerMessage',
-      'documentMessage'
-    ];
-
-    if (!mediaTypes.includes(type)) return;
-
     try {
-      const stream = await downloadContentFromMessage(
-        cleanMessage[type],
-        type.replace('Message', '')
-      );
+      const id = msg.key.id;
+      if (!id) return;
 
-      let buffer = Buffer.from([]);
-      for await (const chunk of stream) {
-        buffer = Buffer.concat([buffer, chunk]);
+      store.set(id, {
+        key: msg.key,
+        message: msg.message,
+        pushName: msg.pushName || "Unknown",
+        timestamp: Date.now(),
+      });
+
+      if (store.size > 1000) {
+        const firstKey = store.keys().next().value;
+        if (firstKey) store.delete(firstKey);
       }
-
-      if (!buffer.length) return;
-
-      const ext = getExtension(type, cleanMessage);
-      const filePath = path.join(tempFolder, `${safeFileBase(storeKey)}${ext}`);
-
-      await fs.promises.writeFile(filePath, buffer);
-      mediaStore.set(storeKey, filePath);
-
-      setTimeout(() => {
-        messageStore.delete(storeKey);
-        if (mediaStore.has(storeKey)) {
-          try { fs.unlinkSync(mediaStore.get(storeKey)); } catch {}
-          mediaStore.delete(storeKey);
-        }
-      }, CLEANUP_TIME);
-
-    } catch (err) {
-      console.log('❌ AntiDelete media download error:', err.message);
-    }
+    } catch {}
   },
 
   onDelete: async (conn, updates) => {
-    for (const update of updates) {
-      const key = update?.key;
-      if (!key?.id) continue;
+    if (!readSettings().anti_delete) return;
 
-      const isDelete =
-        update.action === 'delete' ||
-        update.update?.message === null;
+    try {
+      for (const item of updates) {
+        const key = item?.key;
+        const update = item?.update;
 
-      if (!isDelete) continue;
+        if (!key || !update) continue;
 
-      const storeKey = makeKey(key);
-      const stored = messageStore.get(storeKey);
-      if (!stored) continue;
+        const deleted =
+          update.message === null ||
+          update.messageStubType === 1 ||
+          update.messageStubType === 2;
 
-      const from = key.remoteJid;
-      const sender = key.participant || from;
+        if (!deleted) continue;
 
-      let caption =
-`🗑️ *Deleted Message Recovered By MALIYA-MD*
+        const msgId = key.id;
+        if (!msgId) continue;
 
-👤 *Sender:* @${sender.split('@')[0]}
-🕒 *Time:* ${new Date().toLocaleString()}`;
+        const saved = store.get(msgId);
+        if (!saved) continue;
 
-      try {
-        const mediaPath = mediaStore.get(storeKey);
-        if (mediaPath && fs.existsSync(mediaPath)) {
-          const opts = { caption, mentions: [sender] };
+        const jid = key.remoteJid;
+        const sender =
+          key.participant ||
+          key.remoteJid ||
+          saved.key?.participant ||
+          saved.key?.remoteJid ||
+          "";
 
-          if (mediaPath.endsWith('.jpg')) {
-            await conn.sendMessage(from, { image: { url: mediaPath }, ...opts });
-          } else if (mediaPath.endsWith('.mp4')) {
-            await conn.sendMessage(from, { video: { url: mediaPath }, ...opts });
-          } else if (mediaPath.endsWith('.webp')) {
-            await conn.sendMessage(from, { sticker: { url: mediaPath } });
-            await conn.sendMessage(from, { text: caption, mentions: [sender] });
-          } else if (mediaPath.endsWith('.ogg')) {
-            await conn.sendMessage(from, {
-              audio: { url: mediaPath },
-              mimetype: 'audio/ogg; codecs=opus'
+        const senderTag = sender ? `@${String(sender).split("@")[0]}` : "Unknown";
+
+        const infoText = `🚨 *ANTI DELETE*\n\n👤 Sender: ${senderTag}\n🕒 Message restored successfully.`;
+
+        if (saved.message.conversation || saved.message.extendedTextMessage) {
+          const text =
+            saved.message.conversation ||
+            saved.message.extendedTextMessage?.text ||
+            "";
+
+          await conn.sendMessage(jid, {
+            text: `${infoText}\n\n💬 Message:\n${text}`,
+            mentions: sender ? [sender] : [],
+          });
+        } else if (saved.message.imageMessage) {
+          await conn.sendMessage(jid, {
+            text: infoText,
+            mentions: sender ? [sender] : [],
+          });
+
+          await conn.sendMessage(jid, {
+            image: { url: saved.message.imageMessage.url || "" },
+            caption: saved.message.imageMessage.caption || "Restored deleted image",
+          }).catch(async () => {
+            await conn.sendMessage(jid, {
+              text: "🖼️ Deleted image detected, but media could not be restored.",
             });
-            await conn.sendMessage(from, { text: caption, mentions: [sender] });
-          } else {
-            await conn.sendMessage(from, {
-              document: { url: mediaPath },
-              ...opts
-            });
-          }
+          });
+        } else if (saved.message.videoMessage) {
+          await conn.sendMessage(jid, {
+            text: infoText,
+            mentions: sender ? [sender] : [],
+          });
 
-          continue;
+          await conn.sendMessage(jid, {
+            video: { url: saved.message.videoMessage.url || "" },
+            caption: saved.message.videoMessage.caption || "Restored deleted video",
+          }).catch(async () => {
+            await conn.sendMessage(jid, {
+              text: "🎥 Deleted video detected, but media could not be restored.",
+            });
+          });
+        } else if (saved.message.audioMessage) {
+          await conn.sendMessage(jid, {
+            text: infoText,
+            mentions: sender ? [sender] : [],
+          });
+
+          await conn.sendMessage(jid, {
+            audio: { url: saved.message.audioMessage.url || "" },
+            mimetype: saved.message.audioMessage.mimetype || "audio/mp4",
+            ptt: false,
+          }).catch(async () => {
+            await conn.sendMessage(jid, {
+              text: "🎵 Deleted audio detected, but media could not be restored.",
+            });
+          });
+        } else if (saved.message.stickerMessage) {
+          await conn.sendMessage(jid, {
+            text: infoText,
+            mentions: sender ? [sender] : [],
+          });
+
+          await conn.sendMessage(jid, {
+            sticker: { url: saved.message.stickerMessage.url || "" },
+          }).catch(async () => {
+            await conn.sendMessage(jid, {
+              text: "🧩 Deleted sticker detected, but media could not be restored.",
+            });
+          });
+        } else if (saved.message.documentMessage) {
+          await conn.sendMessage(jid, {
+            text: infoText,
+            mentions: sender ? [sender] : [],
+          });
+
+          await conn.sendMessage(jid, {
+            document: { url: saved.message.documentMessage.url || "" },
+            mimetype: saved.message.documentMessage.mimetype,
+            fileName: saved.message.documentMessage.fileName || "restored-file",
+            caption: saved.message.documentMessage.caption || "",
+          }).catch(async () => {
+            await conn.sendMessage(jid, {
+              text: "📄 Deleted document detected, but media could not be restored.",
+            });
+          });
+        } else {
+          await conn.sendMessage(jid, {
+            text: `${infoText}\n\n⚠️ Deleted message type detected but could not be fully restored.`,
+            mentions: sender ? [sender] : [],
+          });
         }
-
-        const msgObj = stored.message;
-        let text =
-          msgObj.conversation ||
-          msgObj.extendedTextMessage?.text ||
-          msgObj.imageMessage?.caption ||
-          msgObj.videoMessage?.caption ||
-          msgObj.documentMessage?.caption ||
-          '';
-
-        await conn.sendMessage(from, {
-          text: text
-            ? `${caption}\n\n📝 *Message:* ${text}`
-            : caption,
-          mentions: [sender]
-        });
-
-      } catch (err) {
-        console.log('❌ AntiDelete resend error:', err.message);
       }
+    } catch (e) {
+      console.log("antidelete onDelete error:", e?.message || e);
     }
-  }
+  },
 };
