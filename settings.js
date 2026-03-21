@@ -16,9 +16,20 @@ function normalizeNumber(num = "") {
 }
 
 function isRealOwner(sender = "") {
-  const owner = normalizeNumber(config.BOT_OWNER || "");
-  const user = normalizeNumber(String(sender).split("@")[0] || "");
-  return !!owner && owner === user;
+  const owner = String(config.BOT_OWNER || "").replace(/\D/g, "");
+  let user = String(sender).split("@")[0].replace(/\D/g, "");
+
+  // handle 0XXXXXXXXX format
+  if (user.startsWith("0")) {
+    user = "94" + user.slice(1);
+  }
+
+  // handle +94XXXXXXXXX
+  if (user.startsWith("94") && user.length === 11) {
+    return user === owner;
+  }
+
+  return user === owner;
 }
 
 function onOff(val) {
