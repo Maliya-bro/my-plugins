@@ -212,8 +212,8 @@ cmd(
     category: "owner",
     filename: __filename,
   },
-  async (conn, mek, m, { from, sender, args, reply }) => {
-    if (!isRealOwner(sender)) {
+  async (conn, mek, m, { from, sender, args, reply, isOwner }) => {
+    if (!isOwner) {
       return reply("❌ This command is owner only.");
     }
 
