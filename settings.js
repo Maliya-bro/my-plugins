@@ -19,12 +19,10 @@ function isRealOwner(sender = "") {
   const owner = String(config.BOT_OWNER || "").replace(/\D/g, "");
   let user = String(sender).split("@")[0].replace(/\D/g, "");
 
-  // handle 0XXXXXXXXX format
   if (user.startsWith("0")) {
     user = "94" + user.slice(1);
   }
 
-  // handle +94XXXXXXXXX
   if (user.startsWith("94") && user.length === 11) {
     return user === owner;
   }
@@ -135,71 +133,179 @@ async function sendSettingsMenu(conn, from, mek, reply) {
       conn,
       from,
       {
-        header: {
-          title: "MALIYA-MD SETTINGS",
-        },
-        body: {
-          text: "Owner control panel",
-        },
-        footer: {
-          text: "Select one option",
-        },
-        buttons: [
+        text:
+`⚙️ *MALIYA-MD SETTINGS PANEL*
+
+Owner control settings menu.
+Select an option below.`,
+        footer: "MALIYA-MD | Settings",
+        interactiveButtons: [
           {
-            type: "quick_reply",
-            display_text: "Status",
-            id: ".setting status",
+            name: "quick_reply",
+            buttonParamsJson: JSON.stringify({
+              display_text: "📊 Status",
+              id: ".setting status",
+            }),
           },
           {
-            type: "quick_reply",
-            display_text: "Auto Seen",
-            id: ".setting toggle autoseen",
+            name: "quick_reply",
+            buttonParamsJson: JSON.stringify({
+              display_text: "🌐 Public",
+              id: ".setting public",
+            }),
           },
           {
-            type: "quick_reply",
-            display_text: "Auto React",
-            id: ".setting toggle autoreact",
+            name: "quick_reply",
+            buttonParamsJson: JSON.stringify({
+              display_text: "🔒 Private",
+              id: ".setting private",
+            }),
           },
           {
-            type: "quick_reply",
-            display_text: "Auto Msg",
-            id: ".setting toggle automsg",
+            name: "quick_reply",
+            buttonParamsJson: JSON.stringify({
+              display_text: "⌨️ Typing",
+              id: ".setting presence typing",
+            }),
           },
           {
-            type: "quick_reply",
-            display_text: "Mode",
-            id: ".setting toggle mode",
+            name: "quick_reply",
+            buttonParamsJson: JSON.stringify({
+              display_text: "🎙️ Recording",
+              id: ".setting presence recording",
+            }),
           },
           {
-            type: "quick_reply",
-            display_text: "Anti Delete",
-            id: ".setting toggle antidelete",
+            name: "quick_reply",
+            buttonParamsJson: JSON.stringify({
+              display_text: "⛔ Presence Off",
+              id: ".setting presence off",
+            }),
           },
           {
-            type: "quick_reply",
-            display_text: "Reject Calls",
-            id: ".setting toggle rejectcalls",
+            name: "single_select",
+            buttonParamsJson: JSON.stringify({
+              title: "🟢 ON Settings",
+              sections: [
+                {
+                  title: "Turn ON",
+                  rows: [
+                    {
+                      title: "Auto Seen",
+                      description: "Enable auto status seen",
+                      id: ".setting on autoseen",
+                    },
+                    {
+                      title: "Auto React",
+                      description: "Enable auto status react",
+                      id: ".setting on autoreact",
+                    },
+                    {
+                      title: "Auto Msg",
+                      description: "Enable auto message",
+                      id: ".setting on automsg",
+                    },
+                    {
+                      title: "Anti Delete",
+                      description: "Enable anti delete",
+                      id: ".setting on antidelete",
+                    },
+                    {
+                      title: "Reject Calls",
+                      description: "Enable auto reject calls",
+                      id: ".setting on rejectcalls",
+                    },
+                  ],
+                },
+              ],
+            }),
           },
           {
-            type: "quick_reply",
-            display_text: "Typing",
-            id: ".setting presence typing",
+            name: "single_select",
+            buttonParamsJson: JSON.stringify({
+              title: "🔴 OFF Settings",
+              sections: [
+                {
+                  title: "Turn OFF",
+                  rows: [
+                    {
+                      title: "Auto Seen",
+                      description: "Disable auto status seen",
+                      id: ".setting off autoseen",
+                    },
+                    {
+                      title: "Auto React",
+                      description: "Disable auto status react",
+                      id: ".setting off autoreact",
+                    },
+                    {
+                      title: "Auto Msg",
+                      description: "Disable auto message",
+                      id: ".setting off automsg",
+                    },
+                    {
+                      title: "Anti Delete",
+                      description: "Disable anti delete",
+                      id: ".setting off antidelete",
+                    },
+                    {
+                      title: "Reject Calls",
+                      description: "Disable auto reject calls",
+                      id: ".setting off rejectcalls",
+                    },
+                  ],
+                },
+              ],
+            }),
           },
           {
-            type: "quick_reply",
-            display_text: "Recording",
-            id: ".setting presence recording",
-          },
-          {
-            type: "quick_reply",
-            display_text: "Presence Off",
-            id: ".setting presence off",
+            name: "single_select",
+            buttonParamsJson: JSON.stringify({
+              title: "🟡 Toggle Settings",
+              sections: [
+                {
+                  title: "Toggle Options",
+                  rows: [
+                    {
+                      title: "Auto Seen",
+                      description: "Toggle auto status seen",
+                      id: ".setting toggle autoseen",
+                    },
+                    {
+                      title: "Auto React",
+                      description: "Toggle auto status react",
+                      id: ".setting toggle autoreact",
+                    },
+                    {
+                      title: "Auto Msg",
+                      description: "Toggle auto message",
+                      id: ".setting toggle automsg",
+                    },
+                    {
+                      title: "Mode",
+                      description: "Toggle public/private",
+                      id: ".setting toggle mode",
+                    },
+                    {
+                      title: "Anti Delete",
+                      description: "Toggle anti delete",
+                      id: ".setting toggle antidelete",
+                    },
+                    {
+                      title: "Reject Calls",
+                      description: "Toggle reject calls",
+                      id: ".setting toggle rejectcalls",
+                    },
+                  ],
+                },
+              ],
+            }),
           },
         ],
       },
       { quoted: mek }
     );
-  } catch {
+  } catch (e) {
     return reply(text);
   }
 }
@@ -246,7 +352,7 @@ cmd(
       }
 
       setSetting("always_presence", value);
-      return reply(`✅ Always presence set to ${value.toUpperCase()}`);
+      return reply(`✅ Always online/ typing set to ${value.toUpperCase()}`);
     }
 
     if (action === "toggle") {
