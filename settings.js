@@ -35,59 +35,30 @@ function onOff(val) {
 }
 
 function presenceText(val) {
-  if (val === "typing") return "TYPING";
-  if (val === "recording") return "RECORDING";
+  if (val === "typing") return "AUTO TYPING";
+  if (val === "recording") return "AUTO RECORDING";
   return "OFF";
 }
 
-function getStatusText() {
+function modeText(val) {
+  return String(val || "public").toUpperCase();
+}
+
+function getStatusCard() {
   const s = readSettings();
 
   return `
-╭━━━〔 *MALIYA-MD SETTINGS* 〕━━━⬣
-┃
-┃ 1. Auto Status Seen  : ${onOff(s.auto_status_seen)}
-┃ 2. Auto Status React : ${onOff(s.auto_status_react)}
-┃ 3. Auto Msg          : ${onOff(s.auto_msg)}
-┃ 4. Bot Mode          : ${String(s.mode).toUpperCase()}
-┃ 5. Anti Delete       : ${onOff(s.anti_delete)}
-┃ 6. Reject Calls      : ${onOff(s.auto_reject_calls)}
-┃ 7. Always Presence   : ${presenceText(s.always_presence)}
-┃
-╰━━━━━━━━━━━━━━━━━━⬣
+🎀 Ξ *BOT SETTINGS PANEL* Ξ
 
-*Commands*
-.setting menu
-.setting status
+🍀 | *WORK TYPE:* ${String(s.mode || "public")}
+🍀 | *PRESENCE:* ${String(s.always_presence || "off")}
+🍀 | *AI CHAT:* ${s.auto_msg ? "on" : "off"}
+🍀 | *ANTI DELETE:* ${s.anti_delete ? "on" : "off"}
+🍀 | *ANTI CALL:* ${s.auto_reject_calls ? "on" : "off"}
+🍀 | *AUTO STATUS:* ${s.auto_status_seen ? "on" : "off"}
+🍀 | *AUTO REACT:* ${s.auto_status_react ? "on" : "off"}
 
-.setting on autoseen
-.setting off autoseen
-
-.setting on autoreact
-.setting off autoreact
-
-.setting on automsg
-.setting off automsg
-
-.setting public
-.setting private
-
-.setting on antidelete
-.setting off antidelete
-
-.setting on rejectcalls
-.setting off rejectcalls
-
-.setting presence off
-.setting presence typing
-.setting presence recording
-
-.setting toggle autoseen
-.setting toggle autoreact
-.setting toggle automsg
-.setting toggle mode
-.setting toggle antidelete
-.setting toggle rejectcalls
+© MALIYA-MD
 `.trim();
 }
 
@@ -102,7 +73,7 @@ function mapKey(name = "") {
     return "auto_status_react";
   }
 
-  if (["automsg", "auto_msg", "msg"].includes(k)) {
+  if (["automsg", "auto_msg", "msg", "aichat", "ai"].includes(k)) {
     return "auto_msg";
   }
 
@@ -110,7 +81,7 @@ function mapKey(name = "") {
     return "anti_delete";
   }
 
-  if (["rejectcalls", "auto_reject_calls", "calls"].includes(k)) {
+  if (["rejectcalls", "auto_reject_calls", "calls", "anticall"].includes(k)) {
     return "auto_reject_calls";
   }
 
@@ -122,7 +93,7 @@ function mapKey(name = "") {
 }
 
 async function sendSettingsMenu(conn, from, mek, reply) {
-  const text = getStatusText();
+  const text = getStatusCard();
 
   if (!sendInteractiveMessage) {
     return reply(text);
@@ -133,168 +104,146 @@ async function sendSettingsMenu(conn, from, mek, reply) {
       conn,
       from,
       {
-        text:
-`⚙️ *MALIYA-MD SETTINGS PANEL*
-
-Owner control settings menu.
-Select an option below.`,
-        footer: "MALIYA-MD | Settings",
+        text,
+        footer: "Change Settings",
         interactiveButtons: [
-          {
-            name: "quick_reply",
-            buttonParamsJson: JSON.stringify({
-              display_text: "📊 Status",
-              id: ".setting status",
-            }),
-          },
-          {
-            name: "quick_reply",
-            buttonParamsJson: JSON.stringify({
-              display_text: "🌐 Public",
-              id: ".setting public",
-            }),
-          },
-          {
-            name: "quick_reply",
-            buttonParamsJson: JSON.stringify({
-              display_text: "🔒 Private",
-              id: ".setting private",
-            }),
-          },
-          {
-            name: "quick_reply",
-            buttonParamsJson: JSON.stringify({
-              display_text: "⌨️ Typing",
-              id: ".setting presence typing",
-            }),
-          },
-          {
-            name: "quick_reply",
-            buttonParamsJson: JSON.stringify({
-              display_text: "🎙️ Recording",
-              id: ".setting presence recording",
-            }),
-          },
-          {
-            name: "quick_reply",
-            buttonParamsJson: JSON.stringify({
-              display_text: "⛔ Presence Off",
-              id: ".setting presence off",
-            }),
-          },
           {
             name: "single_select",
             buttonParamsJson: JSON.stringify({
-              title: "🟢 ON Settings",
+              title: "Change Settings",
               sections: [
                 {
-                  title: "Turn ON",
+                  title: "🛠 MAIN SETTINGS",
                   rows: [
                     {
-                      title: "Auto Seen",
-                      description: "Enable auto status seen",
-                      id: ".setting on autoseen",
+                      title: "Public Mode",
+                      description: "Set bot mode to public",
+                      id: ".setting public",
                     },
                     {
-                      title: "Auto React",
-                      description: "Enable auto status react",
-                      id: ".setting on autoreact",
+                      title: "Private Mode",
+                      description: "Set bot mode to private",
+                      id: ".setting private",
                     },
                     {
-                      title: "Auto Msg",
-                      description: "Enable auto message",
-                      id: ".setting on automsg",
-                    },
-                    {
-                      title: "Anti Delete",
-                      description: "Enable anti delete",
-                      id: ".setting on antidelete",
-                    },
-                    {
-                      title: "Reject Calls",
-                      description: "Enable auto reject calls",
-                      id: ".setting on rejectcalls",
+                      title: "Toggle Mode",
+                      description: "Switch public/private",
+                      id: ".setting toggle mode",
                     },
                   ],
                 },
-              ],
-            }),
-          },
-          {
-            name: "single_select",
-            buttonParamsJson: JSON.stringify({
-              title: "🔴 OFF Settings",
-              sections: [
                 {
-                  title: "Turn OFF",
+                  title: "✨ BOT PRESENCE",
                   rows: [
                     {
-                      title: "Auto Seen",
-                      description: "Disable auto status seen",
-                      id: ".setting off autoseen",
+                      title: "Always Online",
+                      description: "Set typing presence",
+                      id: ".setting presence typing",
                     },
                     {
-                      title: "Auto React",
-                      description: "Disable auto status react",
-                      id: ".setting off autoreact",
+                      title: "Always Offline",
+                      description: "Turn presence off",
+                      id: ".setting presence off",
                     },
                     {
-                      title: "Auto Msg",
-                      description: "Disable auto message",
+                      title: "Auto Typing",
+                      description: "Typing presence mode",
+                      id: ".setting presence typing",
+                    },
+                    {
+                      title: "Auto Recording",
+                      description: "Recording presence mode",
+                      id: ".setting presence recording",
+                    },
+                  ],
+                },
+                {
+                  title: "🤖 AI & TOOLS",
+                  rows: [
+                    {
+                      title: "Enable AI Chat",
+                      description: "Turn ON auto msg",
+                      id: ".setting on automsg",
+                    },
+                    {
+                      title: "Disable AI Chat",
+                      description: "Turn OFF auto msg",
                       id: ".setting off automsg",
                     },
                     {
-                      title: "Anti Delete",
-                      description: "Disable anti delete",
+                      title: "Enable Anti Delete",
+                      description: "Turn ON anti delete",
+                      id: ".setting on antidelete",
+                    },
+                    {
+                      title: "Disable Anti Delete",
+                      description: "Turn OFF anti delete",
                       id: ".setting off antidelete",
                     },
                     {
-                      title: "Reject Calls",
-                      description: "Disable auto reject calls",
+                      title: "Reject Calls ON",
+                      description: "Turn ON reject calls",
+                      id: ".setting on rejectcalls",
+                    },
+                    {
+                      title: "Reject Calls OFF",
+                      description: "Turn OFF reject calls",
                       id: ".setting off rejectcalls",
                     },
                   ],
                 },
-              ],
-            }),
-          },
-          {
-            name: "single_select",
-            buttonParamsJson: JSON.stringify({
-              title: "🟡 Toggle Settings",
-              sections: [
                 {
-                  title: "Toggle Options",
+                  title: "👁 AUTO FUNCTIONS",
                   rows: [
                     {
-                      title: "Auto Seen",
-                      description: "Toggle auto status seen",
+                      title: "Auto Status View ON",
+                      description: "Enable auto status seen",
+                      id: ".setting on autoseen",
+                    },
+                    {
+                      title: "Auto Status View OFF",
+                      description: "Disable auto status seen",
+                      id: ".setting off autoseen",
+                    },
+                    {
+                      title: "Auto Status React ON",
+                      description: "Enable auto react",
+                      id: ".setting on autoreact",
+                    },
+                    {
+                      title: "Auto Status React OFF",
+                      description: "Disable auto react",
+                      id: ".setting off autoreact",
+                    },
+                    {
+                      title: "Toggle Auto Seen",
+                      description: "Switch auto seen",
                       id: ".setting toggle autoseen",
                     },
                     {
-                      title: "Auto React",
-                      description: "Toggle auto status react",
+                      title: "Toggle Auto React",
+                      description: "Switch auto react",
                       id: ".setting toggle autoreact",
                     },
                     {
-                      title: "Auto Msg",
-                      description: "Toggle auto message",
+                      title: "Toggle AI Chat",
+                      description: "Switch auto msg",
                       id: ".setting toggle automsg",
                     },
                     {
-                      title: "Mode",
-                      description: "Toggle public/private",
-                      id: ".setting toggle mode",
-                    },
-                    {
-                      title: "Anti Delete",
-                      description: "Toggle anti delete",
+                      title: "Toggle Anti Delete",
+                      description: "Switch anti delete",
                       id: ".setting toggle antidelete",
                     },
                     {
-                      title: "Reject Calls",
-                      description: "Toggle reject calls",
+                      title: "Toggle Reject Calls",
+                      description: "Switch reject calls",
                       id: ".setting toggle rejectcalls",
+                    },
+                    {
+                      title: "Show Full Status",
+                      description: "View current settings",
+                      id: ".setting status",
                     },
                   ],
                 },
@@ -331,7 +280,7 @@ cmd(
     }
 
     if (action === "status") {
-      return reply(getStatusText());
+      return reply(getStatusCard());
     }
 
     if (action === "private") {
@@ -352,7 +301,7 @@ cmd(
       }
 
       setSetting("always_presence", value);
-      return reply(`✅ Always online/ typing set to ${value.toUpperCase()}`);
+      return reply(`✅ Always presence set to ${presenceText(value)}`);
     }
 
     if (action === "toggle") {
@@ -377,7 +326,7 @@ cmd(
       }
 
       if (key === "auto_msg") {
-        return reply(`✅ Auto Msg: ${onOff(updated.auto_msg)}`);
+        return reply(`✅ AI Chat: ${onOff(updated.auto_msg)}`);
       }
 
       if (key === "anti_delete") {
@@ -408,7 +357,7 @@ cmd(
       }
 
       if (key === "auto_msg") {
-        return reply(`✅ Auto Msg: ${onOff(updated.auto_msg)}`);
+        return reply(`✅ AI Chat: ${onOff(updated.auto_msg)}`);
       }
 
       if (key === "anti_delete") {
@@ -420,6 +369,6 @@ cmd(
       }
     }
 
-    return reply(getStatusText());
+    return reply(getStatusCard());
   }
 );
