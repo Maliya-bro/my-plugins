@@ -11,29 +11,25 @@ try {
   ({ sendInteractiveMessage } = require("gifted-btns"));
 } catch {}
 
-const pendingSettingsMenu = Object.create(null);
+const SETTINGS_IMAGE =
+  "https://github.com/Maliya-bro/MALIYA-MD/blob/main/images/ChatGPT%20Image%20Mar%2022,%202026,%2008_42_52%20AM.png?raw=true";
 
-function normalizeNumber(num = "") {
-  return String(num).replace(/\D/g, "");
-}
+const pendingSettingsMenu = Object.create(null);
 
 function makePendingKey(sender, from) {
   return `${from || ""}::${(sender || "").split(":")[0]}`;
 }
 
 function isRealOwner(sender = "") {
-  const owner = String(config.BOT_OWNER || "").replace(/\D/g, "");
+  const owner = String(
+    config.BOT_OWNER || config.OWNER_NUMBER || config.SUDO || ""
+  ).replace(/\D/g, "");
+
   let user = String(sender).split("@")[0].replace(/\D/g, "");
 
-  if (user.startsWith("0")) {
-    user = "94" + user.slice(1);
-  }
+  if (user.startsWith("0")) user = "94" + user.slice(1);
 
-  if (user.startsWith("94") && user.length === 11) {
-    return user === owner;
-  }
-
-  return user === owner;
+  return !!owner && user === owner;
 }
 
 function onOff(val) {
@@ -52,13 +48,13 @@ function getStatusCard() {
   return `
 🎀 Ξ *BOT SETTINGS PANEL* Ξ
 
-🍀 | *WORK TYPE:* ${String(s.mode || "public")}
-🍀 | *PRESENCE:* ${String(s.always_presence || "off")}
-🍀 | *AI CHAT:* ${s.auto_msg ? "on" : "off"}
-🍀 | *ANTI DELETE:* ${s.anti_delete ? "on" : "off"}
-🍀 | *ANTI CALL:* ${s.auto_reject_calls ? "on" : "off"}
-🍀 | *AUTO STATUS:* ${s.auto_status_seen ? "on" : "off"}
-🍀 | *AUTO REACT:* ${s.auto_status_react ? "on" : "off"}
+🍀 | *WORK TYPE:* ${String(s.mode || "public").toUpperCase()}
+🍀 | *PRESENCE:* ${presenceText(String(s.always_presence || "off"))}
+🍀 | *AI CHAT:* ${onOff(!!s.auto_msg)}
+🍀 | *ANTI DELETE:* ${onOff(!!s.anti_delete)}
+🍀 | *ANTI CALL:* ${onOff(!!s.auto_reject_calls)}
+🍀 | *AUTO STATUS:* ${onOff(!!s.auto_status_seen)}
+🍀 | *AUTO REACT:* ${onOff(!!s.auto_status_react)}
 
 © MALIYA-MD
 `.trim();
@@ -94,182 +90,34 @@ function mapKey(name = "") {
   return null;
 }
 
-function normalizeText(s = "") {
-  return String(s)
-    .replace(/\r/g, "")
-    .replace(/\n+/g, "\n")
-    .replace(/\s+/g, " ")
+function getIncomingText(body, mek, m) {
+  return String(
+    m?.message?.listResponseMessage?.singleSelectReply?.selectedRowId ||
+      m?.message?.buttonsResponseMessage?.selectedButtonId ||
+      m?.message?.templateButtonReplyMessage?.selectedId ||
+      m?.message?.interactiveResponseMessage?.body?.text ||
+      m?.message?.conversation ||
+      m?.message?.extendedTextMessage?.text ||
+      mek?.message?.listResponseMessage?.singleSelectReply?.selectedRowId ||
+      mek?.message?.buttonsResponseMessage?.selectedButtonId ||
+      mek?.message?.templateButtonReplyMessage?.selectedId ||
+      mek?.message?.interactiveResponseMessage?.body?.text ||
+      mek?.message?.conversation ||
+      mek?.message?.extendedTextMessage?.text ||
+      body ||
+      ""
+  )
     .trim()
-    .toUpperCase();
-}
-
-function tryParseJsonString(s) {
-  try {
-    return JSON.parse(s);
-  } catch {
-    return null;
-  }
-}
-
-function extractTexts(body, mek, m) {
-  const texts = [];
-
-  const direct = [
-    body,
-    m?.body,
-    m?.text,
-    m?.message?.conversation,
-    m?.message?.extendedTextMessage?.text,
-    m?.message?.buttonsResponseMessage?.selectedButtonId,
-    m?.message?.buttonsResponseMessage?.selectedDisplayText,
-    m?.message?.templateButtonReplyMessage?.selectedId,
-    m?.message?.templateButtonReplyMessage?.selectedDisplayText,
-    m?.message?.listResponseMessage?.title,
-    m?.message?.listResponseMessage?.singleSelectReply?.selectedRowId,
-    m?.message?.interactiveResponseMessage?.body?.text,
-    m?.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson,
-    mek?.message?.conversation,
-    mek?.message?.extendedTextMessage?.text,
-    mek?.message?.buttonsResponseMessage?.selectedButtonId,
-    mek?.message?.buttonsResponseMessage?.selectedDisplayText,
-    mek?.message?.templateButtonReplyMessage?.selectedId,
-    mek?.message?.templateButtonReplyMessage?.selectedDisplayText,
-    mek?.message?.listResponseMessage?.title,
-    mek?.message?.listResponseMessage?.singleSelectReply?.selectedRowId,
-    mek?.message?.interactiveResponseMessage?.body?.text,
-    mek?.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson,
-  ];
-
-  for (const item of direct) {
-    if (item) texts.push(String(item).trim());
-  }
-
-  const p1 = m?.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson;
-  const p2 = mek?.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson;
-
-  for (const raw of [p1, p2]) {
-    if (!raw) continue;
-    const parsed = tryParseJsonString(raw);
-    if (!parsed) continue;
-
-    const vals = [
-      parsed.id,
-      parsed.selectedId,
-      parsed.selectedRowId,
-      parsed.title,
-      parsed.display_text,
-      parsed.text,
-      parsed.name,
-    ];
-
-    for (const v of vals) {
-      if (v) texts.push(String(v).trim());
-    }
-  }
-
-  return [...new Set(texts.filter(Boolean))];
-}
-
-function resolveSettingsAction(texts) {
-  const normalized = texts.map((t) => normalizeText(t)).filter(Boolean);
-
-  for (const text of normalized) {
-    // direct ids
-    if (text.includes(".SETTING PUBLIC".toUpperCase()) || text === "PUBLIC MODE") {
-      return { action: "public" };
-    }
-
-    if (text.includes(".SETTING PRIVATE".toUpperCase()) || text === "PRIVATE MODE") {
-      return { action: "private" };
-    }
-
-    if (text.includes(".SETTING TOGGLE MODE".toUpperCase()) || text === "TOGGLE MODE") {
-      return { action: "toggle", value: "mode" };
-    }
-
-    if (text.includes(".SETTING PRESENCE TYPING".toUpperCase()) || text === "ALWAYS ONLINE" || text === "AUTO TYPING") {
-      return { action: "presence", value: "typing" };
-    }
-
-    if (text.includes(".SETTING PRESENCE OFF".toUpperCase()) || text === "ALWAYS OFFLINE") {
-      return { action: "presence", value: "off" };
-    }
-
-    if (text.includes(".SETTING PRESENCE RECORDING".toUpperCase()) || text === "AUTO RECORDING") {
-      return { action: "presence", value: "recording" };
-    }
-
-    if (text.includes(".SETTING ON AUTOMSG".toUpperCase()) || text === "ENABLE AI CHAT") {
-      return { action: "on", value: "automsg" };
-    }
-
-    if (text.includes(".SETTING OFF AUTOMSG".toUpperCase()) || text === "DISABLE AI CHAT") {
-      return { action: "off", value: "automsg" };
-    }
-
-    if (text.includes(".SETTING ON ANTIDELETE".toUpperCase()) || text === "ENABLE ANTI DELETE") {
-      return { action: "on", value: "antidelete" };
-    }
-
-    if (text.includes(".SETTING OFF ANTIDELETE".toUpperCase()) || text === "DISABLE ANTI DELETE") {
-      return { action: "off", value: "antidelete" };
-    }
-
-    if (text.includes(".SETTING ON REJECTCALLS".toUpperCase()) || text === "REJECT CALLS ON") {
-      return { action: "on", value: "rejectcalls" };
-    }
-
-    if (text.includes(".SETTING OFF REJECTCALLS".toUpperCase()) || text === "REJECT CALLS OFF") {
-      return { action: "off", value: "rejectcalls" };
-    }
-
-    if (text.includes(".SETTING ON AUTOSEEN".toUpperCase()) || text === "AUTO STATUS VIEW ON") {
-      return { action: "on", value: "autoseen" };
-    }
-
-    if (text.includes(".SETTING OFF AUTOSEEN".toUpperCase()) || text === "AUTO STATUS VIEW OFF") {
-      return { action: "off", value: "autoseen" };
-    }
-
-    if (text.includes(".SETTING ON AUTOREACT".toUpperCase()) || text === "AUTO STATUS REACT ON") {
-      return { action: "on", value: "autoreact" };
-    }
-
-    if (text.includes(".SETTING OFF AUTOREACT".toUpperCase()) || text === "AUTO STATUS REACT OFF") {
-      return { action: "off", value: "autoreact" };
-    }
-
-    if (text.includes(".SETTING TOGGLE AUTOSEEN".toUpperCase()) || text === "TOGGLE AUTO SEEN") {
-      return { action: "toggle", value: "autoseen" };
-    }
-
-    if (text.includes(".SETTING TOGGLE AUTOREACT".toUpperCase()) || text === "TOGGLE AUTO REACT") {
-      return { action: "toggle", value: "autoreact" };
-    }
-
-    if (text.includes(".SETTING TOGGLE AUTOMSG".toUpperCase()) || text === "TOGGLE AI CHAT") {
-      return { action: "toggle", value: "automsg" };
-    }
-
-    if (text.includes(".SETTING TOGGLE ANTIDELETE".toUpperCase()) || text === "TOGGLE ANTI DELETE") {
-      return { action: "toggle", value: "antidelete" };
-    }
-
-    if (text.includes(".SETTING TOGGLE REJECTCALLS".toUpperCase()) || text === "TOGGLE REJECT CALLS") {
-      return { action: "toggle", value: "rejectcalls" };
-    }
-
-    if (text.includes(".SETTING STATUS".toUpperCase()) || text === "SHOW FULL STATUS") {
-      return { action: "status" };
-    }
-  }
-
-  return null;
+    .toLowerCase();
 }
 
 function isDuplicateAction(state, sig) {
   const now = Date.now();
-  if (state.lastSig === sig && now - (state.lastAt || 0) < 3000) return true;
+
+  if (state.lastSig === sig && now - (state.lastAt || 0) < 3000) {
+    return true;
+  }
+
   state.lastSig = sig;
   state.lastAt = now;
   return false;
@@ -294,6 +142,7 @@ function applySettingAction(action, value) {
     if (!["off", "typing", "recording"].includes(value)) {
       return "❌ Invalid presence mode.";
     }
+
     setSetting("always_presence", value);
     return `✅ Always presence set to ${presenceText(value)}`;
   }
@@ -330,7 +179,10 @@ function applySettingAction(action, value) {
 
   if (action === "on" || action === "off") {
     const key = mapKey(value);
-    if (!key || key === "mode") return "❌ Invalid setting name.";
+
+    if (!key || key === "mode") {
+      return "❌ Invalid setting name.";
+    }
 
     const boolVal = action === "on";
     const updated = setSetting(key, boolVal);
@@ -355,26 +207,195 @@ function applySettingAction(action, value) {
   return getStatusCard();
 }
 
-async function sendSettingsMenu(conn, from, mek, reply, sender) {
+function resolveSettingsActionFromText(text = "") {
+  const t = String(text).trim().toLowerCase();
+  if (!t) return null;
+
+  if (t === ".setting menuopen" || t === "change settings") {
+    return { action: "menuopen" };
+  }
+
+  if (t === ".setting status" || t === "show full status") {
+    return { action: "status" };
+  }
+
+  if (t === ".setting public" || t === "public mode") {
+    return { action: "public" };
+  }
+
+  if (t === ".setting private" || t === "private mode") {
+    return { action: "private" };
+  }
+
+  if (t === ".setting toggle mode" || t === "toggle mode") {
+    return { action: "toggle", value: "mode" };
+  }
+
+  if (t === ".setting presence typing" || t === "auto typing") {
+    return { action: "presence", value: "typing" };
+  }
+
+  if (t === ".setting presence recording" || t === "auto recording") {
+    return { action: "presence", value: "recording" };
+  }
+
+  if (t === ".setting presence off" || t === "presence off") {
+    return { action: "presence", value: "off" };
+  }
+
+  if (t === ".setting on automsg" || t === "enable ai chat") {
+    return { action: "on", value: "automsg" };
+  }
+
+  if (t === ".setting off automsg" || t === "disable ai chat") {
+    return { action: "off", value: "automsg" };
+  }
+
+  if (t === ".setting on antidelete" || t === "enable anti delete") {
+    return { action: "on", value: "antidelete" };
+  }
+
+  if (t === ".setting off antidelete" || t === "disable anti delete") {
+    return { action: "off", value: "antidelete" };
+  }
+
+  if (t === ".setting on rejectcalls" || t === "reject calls on") {
+    return { action: "on", value: "rejectcalls" };
+  }
+
+  if (t === ".setting off rejectcalls" || t === "reject calls off") {
+    return { action: "off", value: "rejectcalls" };
+  }
+
+  if (t === ".setting on autoseen" || t === "auto status view on") {
+    return { action: "on", value: "autoseen" };
+  }
+
+  if (t === ".setting off autoseen" || t === "auto status view off") {
+    return { action: "off", value: "autoseen" };
+  }
+
+  if (t === ".setting on autoreact" || t === "auto status react on") {
+    return { action: "on", value: "autoreact" };
+  }
+
+  if (t === ".setting off autoreact" || t === "auto status react off") {
+    return { action: "off", value: "autoreact" };
+  }
+
+  if (t === ".setting toggle autoseen" || t === "toggle auto seen") {
+    return { action: "toggle", value: "autoseen" };
+  }
+
+  if (t === ".setting toggle autoreact" || t === "toggle auto react") {
+    return { action: "toggle", value: "autoreact" };
+  }
+
+  if (t === ".setting toggle automsg" || t === "toggle ai chat") {
+    return { action: "toggle", value: "automsg" };
+  }
+
+  if (t === ".setting toggle antidelete" || t === "toggle anti delete") {
+    return { action: "toggle", value: "antidelete" };
+  }
+
+  if (t === ".setting toggle rejectcalls" || t === "toggle reject calls") {
+    return { action: "toggle", value: "rejectcalls" };
+  }
+
+  return null;
+}
+
+async function sendSettingsHome(conn, from, mek, reply, sender) {
   const text = getStatusCard();
 
+  const key = makePendingKey(sender, from);
+  pendingSettingsMenu[key] = {
+    createdAt: Date.now(),
+    lastSig: "",
+    lastAt: 0,
+  };
+
   if (!sendInteractiveMessage) {
-    return reply(text);
+    return conn.sendMessage(
+      from,
+      {
+        image: { url: SETTINGS_IMAGE },
+        caption:
+          text +
+          "\n\nUse:\n.setting status\n.setting public\n.setting private\n.setting toggle mode",
+      },
+      { quoted: mek }
+    );
   }
 
   try {
-    const key = makePendingKey(sender, from);
-    pendingSettingsMenu[key] = {
-      createdAt: Date.now(),
-      lastSig: "",
-      lastAt: 0,
-    };
-
-    await sendInteractiveMessage(
+    return await sendInteractiveMessage(
       conn,
       from,
       {
+        image: { url: SETTINGS_IMAGE },
         text,
+        footer: "MALIYA-MD SETTINGS",
+        interactiveButtons: [
+          {
+            name: "quick_reply",
+            buttonParamsJson: JSON.stringify({
+              display_text: "Change Settings",
+              id: ".setting menuopen",
+            }),
+          },
+          {
+            name: "quick_reply",
+            buttonParamsJson: JSON.stringify({
+              display_text: "Show Full Status",
+              id: ".setting status",
+            }),
+          },
+        ],
+      },
+      { quoted: mek }
+    );
+  } catch (e) {
+    console.log("SETTINGS HOME ERROR:", e);
+    return conn.sendMessage(
+      from,
+      {
+        image: { url: SETTINGS_IMAGE },
+        caption: text,
+      },
+      { quoted: mek }
+    );
+  }
+}
+
+async function sendSettingsRolesMenu(conn, from, mek, reply, sender) {
+  const key = makePendingKey(sender, from);
+  pendingSettingsMenu[key] = pendingSettingsMenu[key] || {
+    createdAt: Date.now(),
+    lastSig: "",
+    lastAt: 0,
+  };
+  pendingSettingsMenu[key].createdAt = Date.now();
+
+  if (!sendInteractiveMessage) {
+    return conn.sendMessage(
+      from,
+      {
+        image: { url: SETTINGS_IMAGE },
+        caption: getStatusCard(),
+      },
+      { quoted: mek }
+    );
+  }
+
+  try {
+    return await sendInteractiveMessage(
+      conn,
+      from,
+      {
+        image: { url: SETTINGS_IMAGE },
+        text: "⚙️ *Choose a setting role below*",
         footer: "Change Settings",
         interactiveButtons: [
           {
@@ -406,24 +427,19 @@ async function sendSettingsMenu(conn, from, mek, reply, sender) {
                   title: "✨ BOT PRESENCE",
                   rows: [
                     {
-                      title: "Always Online",
-                      description: "Set typing presence",
-                      id: ".setting presence typing",
-                    },
-                    {
-                      title: "Always Offline",
-                      description: "Turn presence off",
-                      id: ".setting presence off",
-                    },
-                    {
                       title: "Auto Typing",
-                      description: "Typing presence mode",
+                      description: "Set typing presence mode",
                       id: ".setting presence typing",
                     },
                     {
                       title: "Auto Recording",
-                      description: "Recording presence mode",
+                      description: "Set recording presence mode",
                       id: ".setting presence recording",
+                    },
+                    {
+                      title: "Presence OFF",
+                      description: "Turn presence off",
+                      id: ".setting presence off",
                     },
                   ],
                 },
@@ -525,7 +541,15 @@ async function sendSettingsMenu(conn, from, mek, reply, sender) {
       { quoted: mek }
     );
   } catch (e) {
-    return reply(text);
+    console.log("SETTINGS ROLES MENU ERROR:", e);
+    return conn.sendMessage(
+      from,
+      {
+        image: { url: SETTINGS_IMAGE },
+        caption: getStatusCard(),
+      },
+      { quoted: mek }
+    );
   }
 }
 
@@ -538,138 +562,153 @@ cmd(
     filename: __filename,
   },
   async (conn, mek, m, { from, sender, args, reply, isOwner }) => {
-    if (!isOwner) {
+    if (!(isOwner || isRealOwner(sender))) {
       return reply("❌ This command is owner only.");
     }
 
     const action = String(args[0] || "menu").toLowerCase().trim();
-    const value = String(args[1] || "").toLowerCase().trim();
+    const value = String(args.slice(1).join(" ") || "")
+      .toLowerCase()
+      .trim();
 
-    if (action === "menu") {
-      return sendSettingsMenu(conn, from, mek, reply, sender);
-    }
+    try {
+      if (action === "menu") {
+        return sendSettingsHome(conn, from, mek, reply, sender);
+      }
 
-    if (action === "status") {
+      if (action === "menuopen") {
+        return sendSettingsRolesMenu(conn, from, mek, reply, sender);
+      }
+
+      if (action === "status") {
+        return reply(getStatusCard());
+      }
+
+      if (action === "private") {
+        setSetting("mode", "private");
+        return reply("✅ Bot mode set to PRIVATE");
+      }
+
+      if (action === "public") {
+        setSetting("mode", "public");
+        return reply("✅ Bot mode set to PUBLIC");
+      }
+
+      if (action === "presence") {
+        if (!["off", "typing", "recording"].includes(value)) {
+          return reply(
+            "❌ Use:\n.setting presence off\n.setting presence typing\n.setting presence recording"
+          );
+        }
+
+        setSetting("always_presence", value);
+        return reply(`✅ Always presence set to ${presenceText(value)}`);
+      }
+
+      if (action === "toggle") {
+        const key = mapKey(value);
+        if (!key) return reply("❌ Invalid setting name.");
+
+        if (key === "mode") {
+          const now = readSettings();
+          const next = now.mode === "private" ? "public" : "private";
+          setSetting("mode", next);
+          return reply(`✅ Bot mode changed to ${next.toUpperCase()}`);
+        }
+
+        const updated = toggleSetting(key);
+
+        if (key === "auto_status_seen") {
+          return reply(`✅ Auto Status Seen: ${onOff(updated.auto_status_seen)}`);
+        }
+        if (key === "auto_status_react") {
+          return reply(`✅ Auto Status React: ${onOff(updated.auto_status_react)}`);
+        }
+        if (key === "auto_msg") {
+          return reply(`✅ AI Chat: ${onOff(updated.auto_msg)}`);
+        }
+        if (key === "anti_delete") {
+          return reply(`✅ Anti Delete: ${onOff(updated.anti_delete)}`);
+        }
+        if (key === "auto_reject_calls") {
+          return reply(`✅ Reject Calls: ${onOff(updated.auto_reject_calls)}`);
+        }
+      }
+
+      if (action === "on" || action === "off") {
+        const key = mapKey(value);
+
+        if (!key || key === "mode") {
+          return reply("❌ Invalid setting name.");
+        }
+
+        const boolVal = action === "on";
+        const updated = setSetting(key, boolVal);
+
+        if (key === "auto_status_seen") {
+          return reply(`✅ Auto Status Seen: ${onOff(updated.auto_status_seen)}`);
+        }
+        if (key === "auto_status_react") {
+          return reply(`✅ Auto Status React: ${onOff(updated.auto_status_react)}`);
+        }
+        if (key === "auto_msg") {
+          return reply(`✅ AI Chat: ${onOff(updated.auto_msg)}`);
+        }
+        if (key === "anti_delete") {
+          return reply(`✅ Anti Delete: ${onOff(updated.anti_delete)}`);
+        }
+        if (key === "auto_reject_calls") {
+          return reply(`✅ Reject Calls: ${onOff(updated.auto_reject_calls)}`);
+        }
+      }
+
       return reply(getStatusCard());
+    } catch (e) {
+      console.log("SETTING COMMAND ERROR:", e);
+      return reply("❌ Error while changing settings.");
     }
-
-    if (action === "private") {
-      setSetting("mode", "private");
-      return reply("✅ Bot mode set to PRIVATE");
-    }
-
-    if (action === "public") {
-      setSetting("mode", "public");
-      return reply("✅ Bot mode set to PUBLIC");
-    }
-
-    if (action === "presence") {
-      if (!["off", "typing", "recording"].includes(value)) {
-        return reply(
-          "❌ Use:\n.setting presence off\n.setting presence typing\n.setting presence recording"
-        );
-      }
-
-      setSetting("always_presence", value);
-      return reply(`✅ Always presence set to ${presenceText(value)}`);
-    }
-
-    if (action === "toggle") {
-      const key = mapKey(value);
-      if (!key) return reply("❌ Invalid setting name.");
-
-      if (key === "mode") {
-        const now = readSettings();
-        const next = now.mode === "private" ? "public" : "private";
-        setSetting("mode", next);
-        return reply(`✅ Bot mode changed to ${next.toUpperCase()}`);
-      }
-
-      const updated = toggleSetting(key);
-
-      if (key === "auto_status_seen") {
-        return reply(`✅ Auto Status Seen: ${onOff(updated.auto_status_seen)}`);
-      }
-
-      if (key === "auto_status_react") {
-        return reply(`✅ Auto Status React: ${onOff(updated.auto_status_react)}`);
-      }
-
-      if (key === "auto_msg") {
-        return reply(`✅ AI Chat: ${onOff(updated.auto_msg)}`);
-      }
-
-      if (key === "anti_delete") {
-        return reply(`✅ Anti Delete: ${onOff(updated.anti_delete)}`);
-      }
-
-      if (key === "auto_reject_calls") {
-        return reply(`✅ Reject Calls: ${onOff(updated.auto_reject_calls)}`);
-      }
-    }
-
-    if (action === "on" || action === "off") {
-      const key = mapKey(value);
-
-      if (!key || key === "mode") {
-        return reply("❌ Invalid setting name.");
-      }
-
-      const boolVal = action === "on";
-      const updated = setSetting(key, boolVal);
-
-      if (key === "auto_status_seen") {
-        return reply(`✅ Auto Status Seen: ${onOff(updated.auto_status_seen)}`);
-      }
-
-      if (key === "auto_status_react") {
-        return reply(`✅ Auto Status React: ${onOff(updated.auto_status_react)}`);
-      }
-
-      if (key === "auto_msg") {
-        return reply(`✅ AI Chat: ${onOff(updated.auto_msg)}`);
-      }
-
-      if (key === "anti_delete") {
-        return reply(`✅ Anti Delete: ${onOff(updated.anti_delete)}`);
-      }
-
-      if (key === "auto_reject_calls") {
-        return reply(`✅ Reject Calls: ${onOff(updated.auto_reject_calls)}`);
-      }
-    }
-
-    return reply(getStatusCard());
   }
 );
 
-replyHandlers.push({
-  filter: (_body, { sender, from }) => {
-    const key = makePendingKey(sender, from);
-    return !!pendingSettingsMenu[key];
-  },
+if (!global.__maliya_settings_reply_handler_added) {
+  global.__maliya_settings_reply_handler_added = true;
 
-  function: async (conn, mek, m, { from, body, sender, reply }) => {
-    const key = makePendingKey(sender, from);
-    const state = pendingSettingsMenu[key];
-    if (!state) return;
+  replyHandlers.push({
+    filter: (_body, { sender, from }) => {
+      const key = makePendingKey(sender, from);
+      return !!pendingSettingsMenu[key];
+    },
 
-    const texts = extractTexts(body, mek, m);
-    const resolved = resolveSettingsAction(texts);
-    if (!resolved) return;
+    function: async (conn, mek, m, { from, body, sender, reply, isOwner }) => {
+      if (!(isOwner || isRealOwner(sender))) return;
 
-    const sig = `${resolved.action}:${resolved.value || ""}`;
-    if (isDuplicateAction(state, sig)) return;
+      const key = makePendingKey(sender, from);
+      const state = pendingSettingsMenu[key];
+      if (!state) return;
 
-    const result = applySettingAction(resolved.action, resolved.value);
+      const text = getIncomingText(body, mek, m);
+      const resolved = resolveSettingsActionFromText(text);
+      if (!resolved) return;
 
-    if (resolved.action !== "status") {
-      state.createdAt = Date.now();
-    }
+      const sig = `${resolved.action}:${resolved.value || ""}`;
+      if (isDuplicateAction(state, sig)) return;
 
-    return reply(result);
-  },
-});
+      try {
+        if (resolved.action === "menuopen") {
+          state.createdAt = Date.now();
+          return sendSettingsRolesMenu(conn, from, mek, reply, sender);
+        }
+
+        const result = applySettingAction(resolved.action, resolved.value);
+        state.createdAt = Date.now();
+        return reply(result);
+      } catch (e) {
+        console.log("SETTINGS REPLY HANDLER ERROR:", e);
+        return reply("❌ Error while processing settings action.");
+      }
+    },
+  });
+}
 
 setInterval(() => {
   const now = Date.now();
