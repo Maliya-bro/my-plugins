@@ -14,8 +14,8 @@ const pendingQuality = {};
 
 // --- MEGA CONFIGURATION ---
 // Replace with your MEGA credentials or use Environment Variables
-const MEGA_EMAIL = process.env.MEGA_EMAIL || "YOUR_MEGA_EMAIL";
-const MEGA_PASSWORD = process.env.MEGA_PASSWORD || "YOUR_MEGA_PASSWORD";
+const MEGA_EMAIL = process.env.MEGA_EMAIL || "sithmikavihara801@gmail.com";
+const MEGA_PASSWORD = process.env.MEGA_PASSWORD || "@@@iron. spider*man";
 
 async function getBypassedContent(url) {
     const browser = await puppeteer.launch({
