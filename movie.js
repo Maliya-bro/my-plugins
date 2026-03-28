@@ -13,7 +13,7 @@ const pendingQuality = new Map();
 
 // --- CREDENTIALS (හීනියට Password එක මාරු කරලා මෙතනට දාන්න) ---
 const MEGA_EMAIL = "sithmikavihara801@gmail.com";
-const MEGA_PASSWORD = "ඔයාගේ_අලුත්_මුරපදය_මෙතනට";
+const MEGA_PASSWORD = "@@@iron. spider*man";
 
 /**
  * MALIYA-MD BROWSER ENGINE (With Global Stability)
