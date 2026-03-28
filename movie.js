@@ -69,42 +69,6 @@ cmd({
     } catch (e) { reply("❌ ERROR: " + e.message); }
 });
 
-// --- HANDLER: QUALITY SELECTION ---
-replyHandlers.push({
-    filter: (body, { sender }) => pendingSearch[sender] && !isNaN(body),
-    function: async (sock, mek, m, { from, body, sender, reply }) => {
-        const selected = pendingSearch[sender].results[parseInt(body) - 1];
-        if (!selected) return;
-        delete pendingSearch[sender];
-        reply(`⏳ *MALIYA-MD IS EXTRACTING LINKS...*\nTarget: ${selected.title}`);
-        try {
-            const moviePageHtml = await getBypassedContent(selected.link);
-            const $ = cheerio.load(moviePageHtml);
-            let downloadLinks = [];
-            $('a[href*="zt-links"]').each((i, el) => {
-                const url = $(el).attr('href');
-                const parentText = $(el).closest('tr, div').text();
-                const quality = parentText.includes('1080p') ? '1080p' : parentText.includes('720p') ? '720p' : '480p';
-                const sizeMatch = parentText.match(/(\d+(\.\d+)?)\s*(GB|MB)/i);
-                if (sizeMatch) {
-                    const sizeVal = parseFloat(sizeMatch[1]);
-                    const unit = sizeMatch[3].toUpperCase();
-                    let sizeInGB = unit === 'MB' ? sizeVal / 1024 : sizeVal;
-                    if (sizeInGB <= 2.0) { // WhatsApp 2GB Limit
-                        downloadLinks.push({ url, quality, size: sizeMatch[0] });
-                    }
-                }
-            });
-            if (downloadLinks.length === 0) return reply("❌ Qualities under 2GB not found.");
-            pendingQuality[sender] = { title: selected.title, links: downloadLinks };
-            let qMsg = `🎬 *SELECT QUALITY - MALIYA-MD*\n\n`;
-            downloadLinks.forEach((l, i) => qMsg += `*${i+1}.* ${l.quality} (${l.size})\n`);
-            reply(qMsg + `\n📥 *Reply with number to process via MEGA.*`);
-        } catch (e) { reply("❌ LINK ERROR: " + e.message); }
-    }
-});
-
-// --- HANDLER: DOWNLOAD -> MEGA -> WHATSAPP -> DELETE ---
 replyHandlers.push({
     filter: (body, { sender }) => pendingQuality[sender] && !isNaN(body),
     function: async (sock, mek, m, { from, body, sender, reply }) => {
@@ -121,32 +85,48 @@ replyHandlers.push({
             if (!directLink) return reply("❌ Failed to bypass host.");
 
             // Login to MEGA
-            const storage = await new Storage({ email: MEGA_EMAIL, password: MEGA_PASSWORD }).ready;
+            const storage = await new Storage({ 
+                email: MEGA_EMAIL, 
+                password: MEGA_PASSWORD 
+            }).ready;
             
-            // Download from source as Stream and Upload to MEGA
-            const response = await axios({ method: 'get', url: directLink, responseType: 'stream', headers: { "Referer": "https://cinesubz.lk/", "User-Agent": "Mozilla/5.0" } });
+            // 403 Error එක විසඳීමට Headers වැඩි දියුණු කිරීම
+            const response = await axios({
+                method: 'get',
+                url: directLink,
+                responseType: 'stream',
+                headers: {
+                    'Accept': '*/*',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Connection': 'keep-alive',
+                    'Referer': 'https://cinesubz.lk/', // ඉතා වැදගත්
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                    'Origin': 'https://cinesubz.lk'
+                }
+            });
             
-            const fileName = `${data.title.replace(/[^a-zA-Z0-3]/g, "_")}_MALIYA_MD.mp4`;
+            const fileName = `${data.title.replace(/[^a-zA-Z0-9]/g, "_")}_MALIYA_MD.mp4`;
+            
+            // MEGA එකට Upload කිරීම
             const file = await storage.upload(fileName, response.data).complete;
             
-            reply("☁️ *UPLOADED TO MEGA!* Now streaming to WhatsApp...");
+            reply("☁️ *UPLOADED TO MEGA!* Sending to WhatsApp...");
 
-            // Get the Buffer from MEGA and send to WhatsApp
             const fileBuffer = await file.downloadBuffer();
             
             await sock.sendMessage(from, {
                 document: fileBuffer,
                 mimetype: "video/mp4",
                 fileName: fileName,
-                caption: `🎬 *${data.title}*\n\n*Quality:* ${selected.quality}\n*Size:* ${selected.size}\n*Cloud:* MALIYA-MD MEGA STORAGE`
+                caption: `🎬 *${data.title}*\n\n*Quality:* ${selected.quality}\n*Size:* ${selected.size}\n*Status:* Successfully Processed via MALIYA-MD DATABASE`
             }, { quoted: mek });
 
             // AUTO DELETE FROM MEGA
             await file.delete();
-            reply("✅ *PROCESS COMPLETE!*\nFile sent and auto-deleted from MEGA.");
 
         } catch (e) {
-            reply("❌ PROCESS ERROR: " + e.message);
+            console.error(e);
+            reply("❌ PROCESS ERROR: " + (e.response ? `Site Blocked Access (Status: ${e.response.status})` : e.message));
         }
     }
 });
