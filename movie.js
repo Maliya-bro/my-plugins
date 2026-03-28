@@ -13,9 +13,8 @@ const pendingSearch = {};
 const pendingQuality = {};
 
 // --- MEGA CONFIGURATION ---
-// Replace with your MEGA credentials or use Environment Variables
-const MEGA_EMAIL = process.env.MEGA_EMAIL || "sithmikavihara801@gmail.com";
-const MEGA_PASSWORD = process.env.MEGA_PASSWORD || "@@@iron. spider*man";
+const MEGA_EMAIL = "sithmikavihara801@gmail.com";
+const MEGA_PASSWORD = "@@@iron. spider*man";
 
 async function getBypassedContent(url) {
     const browser = await puppeteer.launch({
@@ -36,7 +35,7 @@ async function getBypassedContent(url) {
     }
 }
 
-// --- COMMAND: FILM SEARCH ---
+// 1. FILM SEARCH COMMAND
 cmd({
     pattern: "film",
     alias: ["movie", "cinesubz"],
@@ -61,7 +60,9 @@ cmd({
             }
         });
         if (results.length === 0) return reply("❌ No results found.");
-        pendingSearch[sender] = { results };
+        
+        pendingSearch[sender] = { results }; // සර්ච් රිසල්ට් සේව් කිරීම
+        
         let msg = `🎬 *MALIYA-MD MOVIE SEARCH RESULTS*\n\n`;
         results.forEach((res, i) => msg += `*${i+1}.* ${res.title}\n`);
         msg += `\n📥 *Reply with number.*`;
@@ -69,6 +70,50 @@ cmd({
     } catch (e) { reply("❌ ERROR: " + e.message); }
 });
 
+// 2. HANDLER FOR MOVIE SELECTION (මෙන්න මේ කොටසයි ඔයාගේ කෝඩ් එකේ නැත්තේ)
+replyHandlers.push({
+    filter: (body, { sender }) => pendingSearch[sender] && !isNaN(body),
+    function: async (sock, mek, m, { from, body, sender, reply }) => {
+        const selected = pendingSearch[sender].results[parseInt(body) - 1];
+        if (!selected) return;
+        delete pendingSearch[sender];
+        
+        reply(`⏳ *MALIYA-MD IS EXTRACTING LINKS...*\nTarget: ${selected.title}`);
+        
+        try {
+            const moviePageHtml = await getBypassedContent(selected.link);
+            const $ = cheerio.load(moviePageHtml);
+            let downloadLinks = [];
+            
+            $('a[href*="zt-links"]').each((i, el) => {
+                const url = $(el).attr('href');
+                const parentText = $(el).closest('tr, div').text();
+                const quality = parentText.includes('1080p') ? '1080p' : parentText.includes('720p') ? '720p' : '480p';
+                const sizeMatch = parentText.match(/(\d+(\.\d+)?)\s*(GB|MB)/i);
+                
+                if (sizeMatch) {
+                    const sizeVal = parseFloat(sizeMatch[1]);
+                    const unit = sizeMatch[3].toUpperCase();
+                    let sizeInGB = unit === 'MB' ? sizeVal / 1024 : sizeVal;
+                    
+                    if (sizeInGB <= 2.0) { // 2GB Limit
+                        downloadLinks.push({ url, quality, size: sizeMatch[0] });
+                    }
+                }
+            });
+
+            if (downloadLinks.length === 0) return reply("❌ No qualities under 2GB found.");
+            
+            pendingQuality[sender] = { title: selected.title, links: downloadLinks };
+            
+            let qMsg = `🎬 *SELECT QUALITY - MALIYA-MD*\n\n`;
+            downloadLinks.forEach((l, i) => qMsg += `*${i+1}.* ${l.quality} (${l.size})\n`);
+            reply(qMsg + `\n📥 *Reply with number to process via MEGA.*`);
+        } catch (e) { reply("❌ LINK ERROR: " + e.message); }
+    }
+});
+
+// 3. HANDLER FOR QUALITY SELECTION & MEGA PROCESS
 replyHandlers.push({
     filter: (body, { sender }) => pendingQuality[sender] && !isNaN(body),
     function: async (sock, mek, m, { from, body, sender, reply }) => {
@@ -84,49 +129,35 @@ replyHandlers.push({
             const directLink = finalHtml.match(/https?:\/\/(bot\d|sonic-cloud|cloud)[^\s"']+/)?.[0];
             if (!directLink) return reply("❌ Failed to bypass host.");
 
-            // Login to MEGA
-            const storage = await new Storage({ 
-                email: MEGA_EMAIL, 
-                password: MEGA_PASSWORD 
-            }).ready;
+            const storage = await new Storage({ email: MEGA_EMAIL, password: MEGA_PASSWORD }).ready;
             
-            // 403 Error එක විසඳීමට Headers වැඩි දියුණු කිරීම
             const response = await axios({
                 method: 'get',
                 url: directLink,
                 responseType: 'stream',
                 headers: {
                     'Accept': '*/*',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Connection': 'keep-alive',
-                    'Referer': 'https://cinesubz.lk/', // ඉතා වැදගත්
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                    'Origin': 'https://cinesubz.lk'
+                    'Referer': 'https://cinesubz.lk/',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                 }
             });
             
             const fileName = `${data.title.replace(/[^a-zA-Z0-9]/g, "_")}_MALIYA_MD.mp4`;
-            
-            // MEGA එකට Upload කිරීම
             const file = await storage.upload(fileName, response.data).complete;
             
             reply("☁️ *UPLOADED TO MEGA!* Sending to WhatsApp...");
-
             const fileBuffer = await file.downloadBuffer();
             
             await sock.sendMessage(from, {
                 document: fileBuffer,
                 mimetype: "video/mp4",
                 fileName: fileName,
-                caption: `🎬 *${data.title}*\n\n*Quality:* ${selected.quality}\n*Size:* ${selected.size}\n*Status:* Successfully Processed via MALIYA-MD DATABASE`
+                caption: `🎬 *${data.title}*\n\n*Quality:* ${selected.quality}\n*Size:* ${selected.size}\n*Status:* Processed via MALIYA-MD`
             }, { quoted: mek });
 
-            // AUTO DELETE FROM MEGA
             await file.delete();
-
         } catch (e) {
-            console.error(e);
-            reply("❌ PROCESS ERROR: " + (e.response ? `Site Blocked Access (Status: ${e.response.status})` : e.message));
+            reply("❌ PROCESS ERROR: " + (e.response ? `Blocked (${e.response.status})` : e.message));
         }
     }
 });
